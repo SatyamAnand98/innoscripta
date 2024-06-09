@@ -109,14 +109,6 @@ class ElasticService {
 
         users = users.map((user: any) => user._source);
 
-        // const usersObject: { [key: string]: any } = users.reduce(
-        //     (acc: any, user: any) => {
-        //         acc[user.username] = user;
-        //         return acc;
-        //     },
-        //     {}
-        // );
-
         return users;
     }
 
@@ -199,6 +191,7 @@ class ElasticService {
     public async getAll(index: string): Promise<any> {
         return this.client.search({
             index,
+            _source: ["_id", "*"],
         });
     }
 

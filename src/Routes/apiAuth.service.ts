@@ -37,6 +37,12 @@ apiAuthRouter.get("/login", (req, res) => {
     );
 });
 
+apiAuthRouter.get("/login-2", async (req, res) => {
+    res.redirect(
+        `https://login.microsoftonline.com/${envs.TENANT_ID}/v2.0/adminconsent?client_id=${envs.CLIENT_ID}&redirect_uri=${envs.REDIRECT_URI}&scope=https://ps.outlook.com/.default`
+    );
+});
+
 apiAuthRouter.get("/callback", async (req, res) => {
     const code = req.query.code as string;
 
@@ -76,6 +82,8 @@ apiAuthRouter.get("/callback", async (req, res) => {
 
         const result = await response.json();
 
+        console.log("Result: ", result);
+
         const sessionId = uuidv4();
         (req.session as any).accessToken = result.access_token;
         (req.session as any).refreshToken = result.refresh_token;
@@ -111,12 +119,14 @@ apiAuthRouter.get("/success", async (req, res) => {
 
     const user = await response.json();
 
+    console.log("Users: ", user);
+
     const userSession = {
         sessionId: (req.session as any).sessionId,
         accessToken,
         refreshToken,
         username: user.displayName,
-        userMail: user.mail,
+        userMail: user.userPrincipalName,
         userMobile: user.mobilePhone,
         userId: user.id,
         userPrincipalName: user.userPrincipalName,

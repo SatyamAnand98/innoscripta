@@ -48,8 +48,6 @@ class App {
 
         // Delete all logs
         // this.deleteAllLogs();
-
-        // this.testFunctionality();
     }
 
     /**
@@ -137,13 +135,6 @@ class App {
                 error.message
             );
         }
-    }
-
-    private async testFunctionality() {
-        console.log(
-            "Fetching sessions: ",
-            await ElasticService.getAll("sessions")
-        );
     }
 
     /**

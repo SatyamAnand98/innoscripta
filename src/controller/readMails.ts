@@ -2,6 +2,7 @@ import imaps from "imap-simple";
 import { simpleParser } from "mailparser";
 import ElasticService from "../services/elastic";
 import cron from "node-cron";
+import { Client } from "@microsoft/microsoft-graph-client";
 
 const config = {
     imap: {
@@ -20,15 +21,53 @@ const generateOAuth2String = (email: string, token: string) => {
     return `user=${email}\x01auth=Bearer ${token}\x01\x01`;
 };
 
+async function monitorMailbox(accessToken: any) {
+    try {
+        const client = Client.init({
+            authProvider: (done) => {
+                done(null, accessToken);
+            },
+        });
+
+        await client
+            .api("/me/messages")
+            .get()
+            .then((response) =>
+                response
+                    .watch("$delta", {
+                        filter: "isDeleted eq false",
+                    })
+                    .subscribe({
+                        onNext: (message: any) => {
+                            console.log(
+                                "New email received or updated:",
+                                message
+                            );
+                        },
+                        onCompleted: () => {
+                            console.log("Subscription completed.");
+                        },
+                        onError: (error: any) => {
+                            console.error("Subscription error:", error);
+                        },
+                    })
+            );
+    } catch (error: any) {
+        console.error("Error monitoring mailbox:", error.message);
+    }
+}
+
 const fetchEmails = async () => {
     try {
         const allUserSessions = (
             await ElasticService.getAll("sessions")
-        ).hits.hits.map((session: any) => session._source);
+        ).hits.hits.map((session: any) => session);
 
         for (let userSession of allUserSessions) {
+            const sessionId = userSession._id;
+            userSession = userSession._source;
             let accessToken = userSession.accessToken;
-            const refreshToken = userSession.refreshToken;
+            let refreshToken = userSession.refreshToken;
 
             if (isTokenExpired(userSession.expiresOn)) {
                 try {
@@ -36,9 +75,11 @@ const fetchEmails = async () => {
                     accessToken = newTokens.accessToken;
                     userSession.accessToken = accessToken;
                     userSession.refreshToken = newTokens.refreshToken;
+                    userSession.expiresOn = newTokens.expiresOn;
+                    refreshToken = newTokens.refreshToken;
                     await ElasticService.update(
                         "sessions",
-                        userSession.sessionId,
+                        sessionId,
                         userSession
                     );
                 } catch (refreshError) {
@@ -50,10 +91,13 @@ const fetchEmails = async () => {
                 }
             }
 
+            console.log(`Monitoring mailbox for user: ${userSession.userMail}`);
+            monitorMailbox(accessToken);
+
             config.imap.user = userSession.userMail;
             config.imap.xoauth2 = generateOAuth2String(
                 userSession.userMail,
-                accessToken
+                refreshToken
             );
 
             console.log(`Connecting to IMAP for user: ${config.imap.user}`);
@@ -140,5 +184,6 @@ const refreshAccessToken = async (refreshToken: string) => {
     return {
         accessToken: result.access_token,
         refreshToken: result.refresh_token,
+        expiresOn: Date.now() + result.expires_in * 1000,
     };
 };
